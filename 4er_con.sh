@@ -1,34 +1,4 @@
 #!/bin/bash
-# --- COMMENTED LOGO (inserted by logo tool) ---
-# [93m
-# 
-# ____________________ __            
-# ______  /_  __ \_  // /____________
-# ___ _  /_  / / /  // /_  _ \_  ___/
-# / /_/ / / /_/ //__  __/  __/  /    
-# \____/  \____/   /_/  \___//_/     
-#  ➪  ᴊ04ᴇʀ ᴛᴏᴏʟꜱ ➪⠀
-# 
-# 
-# 
-# [0m
-# --- END COMMENTED LOGO ---
-
-# --- RUNTIME DISPLAY (runs on start) ---
-_logo='[93m
-____________________ __            
-______  /_  __ \_  // /____________
-___ _  /_  / / /  // /_  _ \_  ___/
-/ /_/ / / /_/ //__  __/  __/  /    
-\____/  \____/   /_/  \___//_/     
- ➪  ᴊ04ᴇʀ ᴛᴏᴏʟꜱ ➪⠀
-
-
-[0m'
-printf "%s\n" "$_logo"
-sleep 3
-# --- END RUNTIME ---
-
 
 # Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then 
@@ -38,36 +8,24 @@ fi
 
 echo "### Starting Kali Linux Setup Script ###"
 
+# ==========================================
 # 1. Update and Upgrade
+# ==========================================
 echo "[+] Updating and Upgrading System..."
 apt update
+# Using full-upgrade to handle dependencies better
 apt full-upgrade -y 
 
-# 2. Install Snapd and Telegram (FIXED SECTION)
-echo "[+] Installing Snapd and Telegram..."
-apt install -y snapd
-systemctl enable --now snapd apparmor
-
-# Allow service to initialize
-echo "[+] Waiting for snapd initialization..."
-sleep 10
-
-# Add snap path to current session
-export PATH=$PATH:/snap/bin
-
-# Install core explicitly to handle the restart/update process
-echo "[+] Installing Snap Core..."
-snap install core || echo "Core already installed or failed, proceeding..."
-
-echo "[+] Installing Telegram..."
-snap install telegram-desktop
-
-# 3. Enable and Start SSH
+# ==========================================
+# 2. Enable and Start SSH
+# ==========================================
 echo "[+] Enabling and Starting SSH..."
 systemctl enable ssh
 systemctl start ssh
 
-# 4. Samba Configuration
+# ==========================================
+# 3. Samba Configuration
+# ==========================================
 echo "[+] Installing and Configuring Samba..."
 apt install -y samba
 
@@ -76,11 +34,16 @@ mkdir -p /smb43
 chmod 777 /smb43
 chown nobody:nogroup /smb43
 
-# Backup original config
-cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
+# Backup original config if backup doesn't exist
+if [ ! -f /etc/samba/smb.conf.bak ]; then
+    cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
+fi
 
-# Add share configuration to smb.conf
-echo "
+# Check if share already exists to avoid duplicate entries
+if grep -q "\[smb43\]" /etc/samba/smb.conf; then
+    echo "[!] Samba share [smb43] already configured. Skipping append."
+else
+    echo "
 [smb43]
    path = /smb43
    browsable = yes
@@ -90,6 +53,8 @@ echo "
    create mask = 0777
    directory mask = 0777
 " >> /etc/samba/smb.conf
+    echo "[+] Samba configuration appended."
+fi
 
 # Interactive Samba User Setup
 read -p "Do you want to create a Samba user with a password? (y/n): " create_smb_user
@@ -107,7 +72,9 @@ fi
 systemctl enable smbd
 systemctl restart smbd
 
-# 5. Apache2 and PHP Configuration
+# ==========================================
+# 4. Apache2 and PHP Configuration
+# ==========================================
 echo "[+] Installing Apache2 and PHP..."
 apt install -y apache2 php libapache2-mod-php
 
@@ -117,6 +84,7 @@ apache_port=${apache_port:-80}
 
 if [ "$apache_port" != "80" ]; then
     echo "[+] Configuring Apache to listen on port $apache_port..."
+    # Only replace if Listen 80 is found (prevents breaking on re-run)
     sed -i "s/Listen 80/Listen $apache_port/g" /etc/apache2/ports.conf
     sed -i "s/:80/:$apache_port/g" /etc/apache2/sites-enabled/000-default.conf
 fi
@@ -133,7 +101,9 @@ if [[ $protect_apache =~ ^[Yy]$ ]]; then
     read -p "Enter username for Apache Auth: " apache_user
     htpasswd -c /etc/apache2/.htpasswd_j $apache_user
     
-    CONFIG_BLOCK="
+    # Check if config is already injected to avoid duplicates
+    if ! grep -q "AuthUserFile /etc/apache2/.htpasswd_j" /etc/apache2/sites-enabled/000-default.conf; then
+        CONFIG_BLOCK="
     <Directory /var/www/html/j>
         AuthType Basic
         AuthName \"Restricted Content\"
@@ -143,17 +113,24 @@ if [[ $protect_apache =~ ^[Yy]$ ]]; then
         AllowOverride All
     </Directory>"
     
-    sed -i "/<\/VirtualHost>/i $CONFIG_BLOCK" /etc/apache2/sites-enabled/000-default.conf
-    echo "[+] Password protection added."
+        # Insert block before </VirtualHost>
+        sed -i "/<\/VirtualHost>/i $CONFIG_BLOCK" /etc/apache2/sites-enabled/000-default.conf
+        echo "[+] Password protection config added."
+    else
+        echo "[!] Password protection config already present."
+    fi
 fi
 
 systemctl enable apache2
 systemctl restart apache2
 
-# 6. GitHub Repository Download and Execution
+# ==========================================
+# 5. GitHub Repository Download and Execution
+# ==========================================
 echo "[+] Downloading external repository..."
 apt install -y git
 
+# Clean previous install if exists
 if [ -d "j04er_x" ]; then
     rm -rf j04er_x
 fi
