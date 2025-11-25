@@ -1,19 +1,19 @@
 #!/bin/bash
 
-# Ensure the script is run as root
+# --- CHECK FOR ROOT ACCESS ---
 if [ "$EUID" -ne 0 ]; then 
-  echo "Please run as root"
-  exit
+  echo "ERROR: This script must be run as root."
+  exit 1
 fi
 
-echo "### Starting Kali Linux Setup Script ###"
+echo "### Starting Ultimate Kali Linux Setup Script ###"
 
 # ==========================================
 # 1. Update and Upgrade
 # ==========================================
 echo "[+] Updating and Upgrading System..."
 apt update
-# Using full-upgrade for complete system updates
+# Use full-upgrade for complete system updates
 apt full-upgrade -y 
 
 # ==========================================
@@ -29,7 +29,7 @@ systemctl start ssh
 echo "[+] Installing and Configuring Samba..."
 apt install -y samba
 
-# Create the folder
+# Create the share directory
 mkdir -p /smb43
 chmod 777 /smb43
 chown nobody:nogroup /smb43
@@ -60,7 +60,6 @@ fi
 read -p "Do you want to create a Samba user with a password? (y/n): " create_smb_user
 if [[ $create_smb_user =~ ^[Yy]$ ]]; then
     read -p "Enter Samba username: " smb_user
-    # Check if user exists in system
     if ! id "$smb_user" &>/dev/null; then
         useradd -m $smb_user
         echo "System user $smb_user created."
@@ -73,7 +72,7 @@ systemctl enable smbd
 systemctl restart smbd
 
 # ==========================================
-# 4. Apache2 and PHP Configuration
+# 4. Apache2 and PHP Configuration (Modular & Robust)
 # ==========================================
 echo "[+] Installing Apache2 and PHP..."
 apt install -y apache2 php libapache2-mod-php
@@ -93,35 +92,41 @@ fi
 mkdir -p /var/www/html/j
 chown www-data:www-data /var/www/html/j
 chmod 755 /var/www/html/j
-echo "<h1>Welcome to J</h1>" > /var/www/html/j/index.html
+echo "<h1>Welcome to J (Secured Area)</h1>" > /var/www/html/j/index.html
 
 # Interactive Directory Protection
 read -p "Do you want to password protect '/var/www/html/j'? (y/n): " protect_apache
 if [[ $protect_apache =~ ^[Yy]$ ]]; then
     read -p "Enter username for Apache Auth: " apache_user
-    htpasswd -c /etc/apache2/.htpasswd_j $apache_user
     
-    # Check if config is already injected to avoid duplicates (Idempotency Check)
-    if ! grep -q "AuthUserFile /etc/apache2/.htpasswd_j" /etc/apache2/sites-enabled/000-default.conf; then
-        CONFIG_BLOCK="
-    <Directory /var/www/html/j>
-        AuthType Basic
-        AuthName \"Restricted Content\"
-        AuthUserFile /etc/apache2/.htpasswd_j
-        Require valid-user
+    # 1. Create the password file
+    htpasswd -c /etc/apache2/.htpasswd_j "$apache_user"
+    
+    # 2. Check and configure the security block using a modular approach (most robust)
+    if [ ! -f /etc/apache2/conf-available/j-security.conf ]; then
+        echo "[+] Creating dedicated security configuration file."
         
-        # FIX: Remove 'Indexes' and add 'DirectoryIndex' to serve index.html 
-        # instead of displaying an empty directory listing.
-        Options FollowSymLinks
-        DirectoryIndex index.html
-        AllowOverride All
-    </Directory>"
+        SECURITY_CONF="
+<Directory /var/www/html/j>
+    AuthType Basic
+    AuthName \"Restricted Content\"
+    AuthUserFile /etc/apache2/.htpasswd_j
+    Require valid-user
     
-        # Insert block before </VirtualHost>
-        sed -i "/<\/VirtualHost>/i $CONFIG_BLOCK" /etc/apache2/sites-enabled/000-default.conf
-        echo "[+] Password protection config added."
+    # FIX: Ensures index.html is served and directory listing is prevented
+    Options FollowSymLinks
+    DirectoryIndex index.html
+    AllowOverride All
+</Directory>
+"
+        # Write the content using tee
+        echo "$SECURITY_CONF" | tee /etc/apache2/conf-available/j-security.conf
+        
+        # Enable the new configuration using the Apache helper tool
+        a2enconf j-security
+        echo "[+] Security configuration enabled via a2enconf."
     else
-        echo "[!] Password protection config already present."
+        echo "[!] Security configuration file j-security.conf already exists. Skipping creation."
     fi
 fi
 
