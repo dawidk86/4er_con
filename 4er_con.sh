@@ -13,7 +13,7 @@ echo "### Starting Kali Linux Setup Script ###"
 # ==========================================
 echo "[+] Updating and Upgrading System..."
 apt update
-# Using full-upgrade to handle dependencies better
+# Using full-upgrade for complete system updates
 apt full-upgrade -y 
 
 # ==========================================
@@ -39,7 +39,7 @@ if [ ! -f /etc/samba/smb.conf.bak ]; then
     cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
 fi
 
-# Check if share already exists to avoid duplicate entries
+# Check if share already exists to avoid duplicate entries (Idempotency Check)
 if grep -q "\[smb43\]" /etc/samba/smb.conf; then
     echo "[!] Samba share [smb43] already configured. Skipping append."
 else
@@ -84,12 +84,12 @@ apache_port=${apache_port:-80}
 
 if [ "$apache_port" != "80" ]; then
     echo "[+] Configuring Apache to listen on port $apache_port..."
-    # Only replace if Listen 80 is found (prevents breaking on re-run)
+    # Prevents adding duplicate Listen lines if run again
     sed -i "s/Listen 80/Listen $apache_port/g" /etc/apache2/ports.conf
     sed -i "s/:80/:$apache_port/g" /etc/apache2/sites-enabled/000-default.conf
 fi
 
-# Create directory "j"
+# Create directory "j" and its index file
 mkdir -p /var/www/html/j
 chown www-data:www-data /var/www/html/j
 chmod 755 /var/www/html/j
@@ -101,7 +101,7 @@ if [[ $protect_apache =~ ^[Yy]$ ]]; then
     read -p "Enter username for Apache Auth: " apache_user
     htpasswd -c /etc/apache2/.htpasswd_j $apache_user
     
-    # Check if config is already injected to avoid duplicates
+    # Check if config is already injected to avoid duplicates (Idempotency Check)
     if ! grep -q "AuthUserFile /etc/apache2/.htpasswd_j" /etc/apache2/sites-enabled/000-default.conf; then
         CONFIG_BLOCK="
     <Directory /var/www/html/j>
@@ -109,7 +109,11 @@ if [[ $protect_apache =~ ^[Yy]$ ]]; then
         AuthName \"Restricted Content\"
         AuthUserFile /etc/apache2/.htpasswd_j
         Require valid-user
-        Options Indexes FollowSymLinks
+        
+        # FIX: Remove 'Indexes' and add 'DirectoryIndex' to serve index.html 
+        # instead of displaying an empty directory listing.
+        Options FollowSymLinks
+        DirectoryIndex index.html
         AllowOverride All
     </Directory>"
     
