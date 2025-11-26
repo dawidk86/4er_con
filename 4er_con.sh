@@ -72,9 +72,11 @@ systemctl enable smbd
 systemctl restart smbd
 
 # ==========================================
-# 4. Apache2 and PHP Configuration (Modular & Robust)
+# 4. Apache2 and PHP Configuration
 # ==========================================
 echo "[+] Installing Apache2 and PHP..."
+
+# ENSURED: Installs Apache AND PHP (and the connector module)
 apt install -y apache2 php libapache2-mod-php
 
 # Interactive Port Setup
@@ -102,7 +104,7 @@ if [[ $protect_apache =~ ^[Yy]$ ]]; then
     # 1. Create the password file
     htpasswd -c /etc/apache2/.htpasswd_j "$apache_user"
     
-    # 2. Check and configure the security block using a modular approach (most robust)
+    # 2. Check and configure the security block using a modular approach
     if [ ! -f /etc/apache2/conf-available/j-security.conf ]; then
         echo "[+] Creating dedicated security configuration file."
         
@@ -134,7 +136,23 @@ systemctl enable apache2
 systemctl restart apache2
 
 # ==========================================
-# 5. GitHub Repository Download and Execution
+# 5. Docker Installation (NEW)
+# ==========================================
+echo "[+] Installing and Configuring Docker..."
+
+# Install Docker engine
+apt install -y docker.io
+
+# Enable Docker to start on boot
+systemctl enable docker
+
+# Start Docker service immediately
+systemctl start docker
+
+echo "[+] Docker installed and running."
+
+# ==========================================
+# 6. GitHub Repository Download and Execution
 # ==========================================
 echo "[+] Downloading external repository..."
 apt install -y git
