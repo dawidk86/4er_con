@@ -94,7 +94,6 @@ fi
 mkdir -p /var/www/html/j
 chown www-data:www-data /var/www/html/j
 chmod 755 /var/www/html/j
-echo "<h1>Welcome to J (Secured Area)</h1>" > /var/www/html/j/index.html
 
 # Interactive Directory Protection
 read -p "Do you want to password protect '/var/www/html/j'? (y/n): " protect_apache
@@ -111,13 +110,15 @@ if [[ $protect_apache =~ ^[Yy]$ ]]; then
         SECURITY_CONF="
 <Directory /var/www/html/j>
     AuthType Basic
-    AuthName \"Restricted Content\"
+    AuthName "Restricted Content"
     AuthUserFile /etc/apache2/.htpasswd_j
     Require valid-user
-    
-    # FIX: Ensures index.html is served and directory listing is prevented
-    Options FollowSymLinks
-    DirectoryIndex index.html
+
+    # FIX: Ensures the folder contents (Index of /j) are displayed
+    # +Indexes enables the listing of files/folders
+    # DirectoryIndex disabled prevents index.html from being served
+    Options +Indexes FollowSymLinks
+    DirectoryIndex disabled
     AllowOverride All
 </Directory>
 "
